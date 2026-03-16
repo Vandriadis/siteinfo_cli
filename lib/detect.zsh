@@ -288,7 +288,10 @@ run_detect() {
   # Page metadata
   local title html_len
   title=$(echo "${page_content}" | grep -oi '<title>[^<]*</title>' | sed 's/<[^>]*>//g' | head -1 | tr -d '\r\n')
-  [[ -n "${title}" ]] && print_key_value "Page Title" "${title}" "cyan"
+  if [[ -n "${title}" ]]; then
+    title=$(decode_html_entities "${title}")
+    print_key_value "Page Title" "${title}" "cyan"
+  fi
 
   html_len=${#content_lc}
   print_key_value "Page Size" "$(bytes_to_human ${html_len})" "white"

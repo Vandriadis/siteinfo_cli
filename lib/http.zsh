@@ -94,19 +94,16 @@ _extract_status_code() {
 _build_redirect_chain() {
   local verbose_output="${1}"
   local chain=()
+  local _rc_line _rc_status _rc_url
 
-  while IFS= read -r line; do
-    # Lines like: < HTTP/1.1 301 Moved Permanently
-    if [[ "${line}" =~ ^\<[[:space:]]HTTP/ ]]; then
-      local status
-      status=$(echo "${line}" | awk '{print $2, $3, $4, $5}')
-      chain+=("${status}")
+  while IFS= read -r _rc_line; do
+    if [[ "${_rc_line}" =~ ^\<[[:space:]]HTTP/ ]]; then
+      _rc_status=$(echo "${_rc_line}" | awk '{print $2, $3, $4, $5}')
+      chain+=("${_rc_status}")
     fi
-    # Lines like: * Issue another request to this URL: '...'
-    if [[ "${line}" =~ "Issue another request to this URL: '" ]]; then
-      local redir_url
-      redir_url=$(echo "${line}" | sed "s/.*Issue another request to this URL: '//;s/'.*//")
-      chain+=("  → ${redir_url}")
+    if [[ "${_rc_line}" =~ "Issue another request to this URL: '" ]]; then
+      _rc_url=$(echo "${_rc_line}" | sed "s/.*Issue another request to this URL: '//;s/'.*//")
+      chain+=("  → ${_rc_url}")
     fi
   done <<< "${verbose_output}"
 
@@ -168,20 +165,24 @@ run_http() {
   # ── Status ───────────────────────────────────────────────────────────────
   print_separator
   local sc="${http_code:-???}"
-  local sc_color
-  sc_color=$(status_color "${sc}")
-  print_key_value "Status Code" "${sc}" "${sc_color}"
+  print_status_line "${sc}"
   print_key_value "Final URL" "${final_url:-${url}}" "cyan"
-  print_key_value "Redirects" "${num_redirects:-0}" "white"
+  if [[ "${num_redirects:-0}" -gt 0 ]]; then
+    print_key_value "Redirects" "${num_redirects} hop(s)" "yellow"
+  else
+    print_key_value "Redirects" "none" "white"
+  fi
 
   # ── Timing ───────────────────────────────────────────────────────────────
   print_separator
-  printf "  ${CLR_BOLD_YELLOW}Timing${CLR_RESET}\n"
-  printf "  ${CLR_DIM}%-${KV_WIDTH}s${CLR_RESET}  %s\n" "DNS Lookup:"      "${t_dns}s"
-  printf "  ${CLR_DIM}%-${KV_WIDTH}s${CLR_RESET}  %s\n" "TCP Connect:"     "${t_connect}s"
-  printf "  ${CLR_DIM}%-${KV_WIDTH}s${CLR_RESET}  %s\n" "TLS Handshake:"   "${t_tls}s"
-  printf "  ${CLR_DIM}%-${KV_WIDTH}s${CLR_RESET}  %s\n" "First Byte (TTFB):" "${t_first}s"
-  printf "  ${CLR_DIM}%-${KV_WIDTH}s${CLR_RESET}  ${CLR_BOLD_WHITE}%s${CLR_RESET}\n" "Total Time:" "${t_total}s"
+  printf "  ${CLR_BOLD_YELLOW}Timing${CLR_RESET}  ${CLR_DIM}(bar = relative to 2s max)${CLR_RESET}\n"
+  # DNS / TCP / TLS use 0.5s warn, 1.5s crit; TTFB uses 0.2s warn, 1s crit
+  print_timing_row "DNS Lookup"       "${t_dns}"     0.1  0.5
+  print_timing_row "TCP Connect"      "${t_connect}" 0.1  0.5
+  print_timing_row "TLS Handshake"    "${t_tls}"     0.2  1.0
+  print_timing_row "First Byte (TTFB)" "${t_first}"  0.2  1.0
+  echo ""
+  printf "  ${CLR_DIM}%-${KV_WIDTH}s${CLR_RESET}  ${CLR_BOLD_WHITE}%ss${CLR_RESET}\n" "Total Time:" "${t_total}"
 
   # ── Server info ──────────────────────────────────────────────────────────
   print_separator
@@ -203,17 +204,19 @@ run_http() {
   print_key_value "Cache-Control" "${cache_control:-(not set)}" "white"
 
   # ── Redirect chain ───────────────────────────────────────────────────────
-  if (( ${num_redirects:-0} > 0 )); then
+  if [[ "${num_redirects:-0}" -gt 0 ]]; then
     print_separator
-    printf "  ${CLR_BOLD_YELLOW}Redirect Chain (%d hops)${CLR_RESET}\n" "${num_redirects}"
+    printf "  ${CLR_BOLD_YELLOW}Redirect Chain${CLR_RESET}  ${CLR_DIM}%d hop(s)${CLR_RESET}\n" "${num_redirects}"
     local verbose_out
     verbose_out=$(_curl_headers_all "${url}" "${UA_DESKTOP}")
     local chain
     chain=$(_build_redirect_chain "${verbose_out}")
     if [[ -n "${chain}" ]]; then
-      while IFS= read -r hop; do
-        [[ -z "${hop}" ]] && continue
-        print_list_item "${hop}"
+      local _hop _hop_n=0
+      while IFS= read -r _hop; do
+        [[ -z "${_hop}" ]] && continue
+        (( _hop_n++ )) || true
+        printf "  ${CLR_DIM}%2d${CLR_RESET}  ${CLR_CYAN}%s${CLR_RESET}\n" "${_hop_n}" "${_hop}"
       done <<< "${chain}"
     fi
   fi
@@ -223,24 +226,39 @@ run_http() {
   cookies=$(_parse_cookies "${final_headers}")
   if [[ -n "${cookies}" ]]; then
     print_separator
-    printf "  ${CLR_BOLD_YELLOW}Set-Cookie Headers${CLR_RESET}\n"
-    while IFS= read -r ck; do
-      [[ -z "${ck}" ]] && continue
-      local ck_val
-      ck_val=$(echo "${ck}" | sed 's/^set-cookie: *//i')
-      print_list_item "${ck_val}"
+    local ck_count
+    ck_count=$(echo "${cookies}" | grep -c . 2>/dev/null || echo 0)
+    printf "  ${CLR_BOLD_YELLOW}Cookies${CLR_RESET}  ${CLR_DIM}(%d set)${CLR_RESET}\n" "${ck_count}"
+    echo ""
+    # Declare loop-local vars BEFORE the loop to avoid zsh printing re-declared locals
+    local _ck _ck_raw _ck_name _ck_flags _ck_ss
+    while IFS= read -r _ck; do
+      [[ -z "${_ck}" ]] && continue
+      _ck_raw=$(echo "${_ck}" | sed 's/^set-cookie: *//i')
+      _ck_name=$(echo "${_ck_raw}" | cut -d= -f1 | tr -d ' ')
+      _ck_flags=""
+      echo "${_ck_raw}" | grep -qi '\bSecure\b'   && _ck_flags+="${CLR_GREEN}Secure${CLR_RESET} "
+      echo "${_ck_raw}" | grep -qi '\bHttpOnly\b'  && _ck_flags+="${CLR_GREEN}HttpOnly${CLR_RESET} "
+      _ck_ss=$(echo "${_ck_raw}" | grep -oi 'SameSite=[A-Za-z]*' | head -1)
+      [[ -n "${_ck_ss}" ]] && _ck_flags+="${CLR_CYAN}${_ck_ss}${CLR_RESET} "
+      [[ -z "${_ck_flags}" ]] && _ck_flags="${CLR_YELLOW}no security flags${CLR_RESET}"
+      printf "  ${CLR_BOLD_WHITE}%-28s${CLR_RESET}  %b\n" "${_ck_name}" "${_ck_flags}"
     done <<< "${cookies}"
   fi
 
   # ── All response headers (collapsed view) ────────────────────────────────
   print_separator
   printf "  ${CLR_BOLD_YELLOW}All Response Headers${CLR_RESET}\n"
-  while IFS= read -r hdr; do
-    hdr="${hdr%$'\r'}"
-    [[ -z "${hdr}" ]] && continue
-    printf "  ${CLR_DIM}%-32s${CLR_RESET}  %s\n" \
-      "${hdr%%:*}" \
-      "${${hdr#*:}## }"
+  # Declare loop vars before the loop
+  local _hdr _hname _hval
+  while IFS= read -r _hdr; do
+    _hdr="${_hdr%$'\r'}"
+    [[ -z "${_hdr}" ]] && continue
+    # Split on FIRST colon only; value may contain colons (e.g. Date: Mon, 16 Mar...)
+    _hname="${_hdr%%:*}"
+    _hval="${_hdr#*: }"
+    [[ "${_hval}" == "${_hdr}" ]] && _hval="${_hdr#*:}"
+    printf "  ${CLR_DIM}%-32s${CLR_RESET}  ${CLR_WHITE}%s${CLR_RESET}\n" "${_hname}" "${_hval}"
   done < <(echo "${final_headers}" | grep -v '^HTTP/')
 
   print_section_end

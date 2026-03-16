@@ -323,33 +323,22 @@ run_security() {
 
   # ── Score Summary ─────────────────────────────────────────────────────────
   print_separator
-  printf "  ${CLR_BOLD_YELLOW}Security Score${CLR_RESET}\n"
+  printf "  ${CLR_BOLD_YELLOW}Security Score${CLR_RESET}  ${CLR_DIM}%d / %d headers present${CLR_RESET}\n" \
+    "${score}" "${max_score}"
   echo ""
 
-  local pct grade_color grade_label
+  print_progress_bar "${score}" "${max_score}" "Header Coverage"
+  echo ""
+
+  local pct
   pct=$(( score * 100 / max_score )) || true
-  if (( pct >= 90 )); then
-    grade_color="${CLR_BOLD_GREEN}"; grade_label="A  — Excellent"
-  elif (( pct >= 75 )); then
-    grade_color="${CLR_GREEN}";      grade_label="B  — Good"
-  elif (( pct >= 50 )); then
-    grade_color="${CLR_BOLD_YELLOW}"; grade_label="C  — Needs improvement"
-  elif (( pct >= 25 )); then
-    grade_color="${CLR_YELLOW}";     grade_label="D  — Poor"
-  else
-    grade_color="${CLR_BOLD_RED}";   grade_label="F  — Critical issues"
-  fi
-
-  printf "  ${CLR_DIM}Headers present:${CLR_RESET} ${CLR_WHITE}%d / %d${CLR_RESET}\n" "${score}" "${max_score}"
-  printf "  ${CLR_DIM}Score:          ${CLR_RESET} ${grade_color}%d%%  %s${CLR_RESET}\n" "${pct}" "${grade_label}"
-  echo ""
 
   [[ "${missing_critical}" -gt 0 ]] && \
     print_warning "${missing_critical} critical header(s) missing — immediate attention recommended"
   [[ "${missing_high}" -gt 0 ]] && \
     print_warning "${missing_high} high-severity header(s) missing"
   [[ "${missing_critical}" -eq 0 && "${missing_high}" -eq 0 && "${pct}" -lt 100 ]] && \
-    print_info "No critical issues. Review medium/low items above."
+    print_info "No critical issues — review medium/low items above"
   [[ "${pct}" -eq 100 ]] && \
     print_success "Perfect score! All security headers are present."
 
