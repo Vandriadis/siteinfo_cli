@@ -19,10 +19,11 @@ show_menu() {
   printf "  ${CLR_BOLD_CYAN} 4)${CLR_RESET}  ${CLR_WHITE}Detect technologies${CLR_RESET}      ${CLR_DIM}Frameworks, CMS, analytics, CDN${CLR_RESET}\n"
   printf "  ${CLR_BOLD_CYAN} 5)${CLR_RESET}  ${CLR_WHITE}Security headers${CLR_RESET}         ${CLR_DIM}CSP, HSTS, X-Frame-Options, cookies${CLR_RESET}\n"
   printf "  ${CLR_BOLD_CYAN} 6)${CLR_RESET}  ${CLR_WHITE}Desktop vs Mobile${CLR_RESET}        ${CLR_DIM}Compare responses across user agents${CLR_RESET}\n"
-  printf "  ${CLR_BOLD_CYAN} 7)${CLR_RESET}  ${CLR_WHITE}Exit${CLR_RESET}\n"
+  printf "  ${CLR_BOLD_CYAN} 7)${CLR_RESET}  ${CLR_WHITE}WHOIS lookup${CLR_RESET}             ${CLR_DIM}Registrar, dates, expiry countdown${CLR_RESET}\n"
+  printf "  ${CLR_BOLD_CYAN} 8)${CLR_RESET}  ${CLR_WHITE}Exit${CLR_RESET}\n"
   echo ""
   printf "${CLR_BOLD_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CLR_RESET}\n"
-  printf "  ${CLR_BOLD_WHITE}Choose an option ${CLR_DIM}[1-7]${CLR_RESET}${CLR_BOLD_WHITE}:${CLR_RESET} "
+  printf "  ${CLR_BOLD_WHITE}Choose an option ${CLR_DIM}[1-8]${CLR_RESET}${CLR_BOLD_WHITE}:${CLR_RESET} "
 }
 
 # ---------------------------------------------------------------------------
@@ -36,10 +37,11 @@ run_full_scan() {
   printf "  ${CLR_BOLD_WHITE}Full Site Scan — %s${CLR_RESET}\n" "${url}"
   printf "${CLR_BOLD_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CLR_RESET}\n"
 
-  run_dns     "${url}"
-  run_http    "${url}"
-  run_detect  "${url}"
+  run_dns      "${url}"
+  run_http     "${url}"
+  run_detect   "${url}"
   run_security "${url}"
+  run_whois    "${url}"
 }
 
 # ---------------------------------------------------------------------------
@@ -191,7 +193,7 @@ menu_loop() {
     read -r choice
 
     case "${choice}" in
-      1|2|3|4|5|6)
+      1|2|3|4|5|6|7)
         # All options except exit require a URL
         echo ""
         if ! prompt_url; then
@@ -207,12 +209,13 @@ menu_loop() {
           4) run_detect     "${url}" ;;
           5) run_security   "${url}" ;;
           6) run_compare    "${url}" ;;
+          7) run_whois      "${url}" ;;
         esac
 
         pause
         ;;
 
-      7|q|Q|exit|quit)
+      8|q|Q|exit|quit)
         echo ""
         printf "  ${CLR_BOLD_CYAN}Goodbye!${CLR_RESET}\n\n"
         exit 0
@@ -224,7 +227,7 @@ menu_loop() {
 
       *)
         echo ""
-        print_warning "Invalid option '${choice}'. Please choose 1–7."
+        print_warning "Invalid option '${choice}'. Please choose 1–8."
         sleep 1
         ;;
     esac
