@@ -20,10 +20,11 @@ show_menu() {
   printf "  ${CLR_BOLD_CYAN} 5)${CLR_RESET}  ${CLR_WHITE}Security headers${CLR_RESET}         ${CLR_DIM}CSP, HSTS, X-Frame-Options, cookies${CLR_RESET}\n"
   printf "  ${CLR_BOLD_CYAN} 6)${CLR_RESET}  ${CLR_WHITE}Desktop vs Mobile${CLR_RESET}        ${CLR_DIM}Compare responses across user agents${CLR_RESET}\n"
   printf "  ${CLR_BOLD_CYAN} 7)${CLR_RESET}  ${CLR_WHITE}WHOIS lookup${CLR_RESET}             ${CLR_DIM}Registrar, dates, expiry countdown${CLR_RESET}\n"
-  printf "  ${CLR_BOLD_CYAN} 8)${CLR_RESET}  ${CLR_WHITE}Exit${CLR_RESET}\n"
+  printf "  ${CLR_BOLD_CYAN} 8)${CLR_RESET}  ${CLR_WHITE}Threat intel${CLR_RESET}            ${CLR_DIM}VirusTotal + Safe Browsing + AbuseIPDB${CLR_RESET}\n"
+  printf "  ${CLR_BOLD_CYAN} 9)${CLR_RESET}  ${CLR_WHITE}Exit${CLR_RESET}\n"
   echo ""
   printf "${CLR_BOLD_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CLR_RESET}\n"
-  printf "  ${CLR_BOLD_WHITE}Choose an option ${CLR_DIM}[1-8]${CLR_RESET}${CLR_BOLD_WHITE}:${CLR_RESET} "
+  printf "  ${CLR_BOLD_WHITE}Choose an option ${CLR_DIM}[1-9]${CLR_RESET}${CLR_BOLD_WHITE}:${CLR_RESET} "
 }
 
 # ---------------------------------------------------------------------------
@@ -42,6 +43,7 @@ run_full_scan() {
   run_detect   "${url}"
   run_security "${url}"
   run_whois    "${url}"
+  run_threat   "${url}"
 }
 
 # ---------------------------------------------------------------------------
@@ -193,7 +195,7 @@ menu_loop() {
     read -r choice
 
     case "${choice}" in
-      1|2|3|4|5|6|7)
+      1|2|3|4|5|6|7|8)
         # All options except exit require a URL
         echo ""
         if ! prompt_url; then
@@ -210,12 +212,13 @@ menu_loop() {
           5) run_security   "${url}" ;;
           6) run_compare    "${url}" ;;
           7) run_whois      "${url}" ;;
+          8) run_threat     "${url}" ;;
         esac
 
         pause
         ;;
 
-      8|q|Q|exit|quit)
+      9|q|Q|exit|quit)
         echo ""
         printf "  ${CLR_BOLD_CYAN}Goodbye!${CLR_RESET}\n\n"
         exit 0
@@ -227,7 +230,7 @@ menu_loop() {
 
       *)
         echo ""
-        print_warning "Invalid option '${choice}'. Please choose 1–8."
+        print_warning "Invalid option '${choice}'. Please choose 1–9."
         sleep 1
         ;;
     esac

@@ -23,6 +23,20 @@ check_dependencies() {
 }
 
 # ---------------------------------------------------------------------------
+# load_env_file — source .env from project root if present
+# Exports loaded variables for child processes.
+# ---------------------------------------------------------------------------
+load_env_file() {
+  local env_path="${SCRIPT_DIR}/.env"
+  if [[ -f "${env_path}" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "${env_path}"
+    set +a
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # normalize_url — ensure URL has a scheme; default to https://
 # Usage: normalized=$(normalize_url "example.com")
 # ---------------------------------------------------------------------------

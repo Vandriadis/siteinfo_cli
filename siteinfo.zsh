@@ -34,6 +34,7 @@ _load_modules() {
     detect.zsh    # Technology detection
     security.zsh  # Security headers
     whois.zsh     # WHOIS registration lookup
+    threat.zsh    # Threat intel via external APIs
     menu.zsh      # Menu system + user-agent globals + event loop
   )
 
@@ -72,6 +73,7 @@ show_help() {
     Detect     50+ technology fingerprints (frameworks, CMS, analytics)
     Security   Security header audit with scoring, cookie flag analysis
     WHOIS      Registrar, creation/expiry dates, name servers, countdown
+    Threat     VirusTotal, Safe Browsing, AbuseIPDB reputation checks
 
   MENU OPTIONS
     1  Full site scan       Run all modules in one pass
@@ -81,7 +83,8 @@ show_help() {
     5  Security headers     Header audit and scoring
     6  Desktop vs Mobile    Compare UA-specific responses
     7  WHOIS lookup         Registrar, dates, expiry countdown
-    8  Exit
+    8  Threat intel         External threat reputation checks
+    9  Exit
 
 EOF
 }
@@ -111,6 +114,9 @@ main() {
 
   # Load all modules
   _load_modules
+
+  # Load environment variables from .env (API keys, etc.)
+  load_env_file
 
   # Sanity-check dependencies
   if ! check_dependencies; then
