@@ -32,18 +32,87 @@ show_menu() {
 # ---------------------------------------------------------------------------
 run_full_scan() {
   local url="${1}"
+  local started_at now elapsed_total
+  started_at=$(date +%s)
+
+  local -a step_labels step_funcs step_states step_times
+  step_labels=("DNS" "HTTP" "Detect" "Security" "WHOIS" "Threat")
+  step_funcs=(run_dns run_http run_detect run_security run_whois run_threat)
+
+  local total_steps=${#step_funcs[@]}
+  local passed=0
+  local failed=0
+  local i fn label step_start step_elapsed rc
 
   echo ""
   printf "${CLR_BOLD_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CLR_RESET}\n"
   printf "  ${CLR_BOLD_WHITE}Full Site Scan — %s${CLR_RESET}\n" "${url}"
   printf "${CLR_BOLD_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CLR_RESET}\n"
+  print_info "Running ${total_steps} modules..."
+  print_scan_progress 0 "${total_steps}" "starting"
 
-  run_dns      "${url}"
-  run_http     "${url}"
-  run_detect   "${url}"
-  run_security "${url}"
-  run_whois    "${url}"
-  run_threat   "${url}"
+  for (( i = 1; i <= total_steps; i++ )); do
+    fn="${step_funcs[$i]}"
+    label="${step_labels[$i]}"
+    step_start=$(date +%s)
+
+    echo ""
+    printf "  ${CLR_BOLD_CYAN}[%d/%d]${CLR_RESET} ${CLR_BOLD_WHITE}%s${CLR_RESET}\n" "${i}" "${total_steps}" "${label}"
+    if ! ui_is_compact; then
+      print_separator
+    fi
+
+    "${fn}" "${url}"
+    rc=$?
+
+    now=$(date +%s)
+    step_elapsed=$(( now - step_start ))
+    step_times[$i]="${step_elapsed}"
+
+    if [[ "${rc}" -eq 0 ]]; then
+      step_states[$i]="PASS"
+      (( passed++ )) || true
+      printf "  ${CLR_BOLD_GREEN}✔ %s completed${CLR_RESET} ${CLR_DIM}(%ss)${CLR_RESET}\n" "${label}" "${step_elapsed}"
+    else
+      step_states[$i]="FAIL"
+      (( failed++ )) || true
+      printf "  ${CLR_BOLD_RED}✖ %s failed${CLR_RESET} ${CLR_DIM}(%ss)${CLR_RESET}\n" "${label}" "${step_elapsed}"
+    fi
+
+    print_scan_progress "${i}" "${total_steps}" "${label}"
+  done
+
+  now=$(date +%s)
+  elapsed_total=$(( now - started_at ))
+
+  echo ""
+  printf "${CLR_BOLD_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CLR_RESET}\n"
+  printf "  ${CLR_BOLD_WHITE}Full Scan Summary${CLR_RESET}\n"
+  printf "${CLR_BOLD_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CLR_RESET}\n"
+
+  print_key_value "Target" "${url}" "cyan"
+  print_key_value "Modules Passed" "${passed}/${total_steps}" "green"
+  local failed_color="green"
+  (( failed > 0 )) && failed_color="red"
+  print_key_value "Modules Failed" "${failed}" "${failed_color}"
+  print_key_value "Total Time" "${elapsed_total}s" "white"
+
+  print_separator
+  printf "  ${CLR_BOLD_YELLOW}Module Health${CLR_RESET}\n"
+  for (( i = 1; i <= total_steps; i++ )); do
+    label="${step_labels[$i]}"
+    if [[ "${step_states[$i]}" == "PASS" ]]; then
+      printf "  ${CLR_BOLD_GREEN}✔${CLR_RESET} %-12s ${CLR_DIM}%ss${CLR_RESET}\n" "${label}" "${step_times[$i]}"
+    else
+      printf "  ${CLR_BOLD_RED}✖${CLR_RESET} %-12s ${CLR_DIM}%ss${CLR_RESET}\n" "${label}" "${step_times[$i]}"
+    fi
+  done
+
+  if (( failed == 0 )); then
+    print_success "Health summary: all modules completed successfully"
+  else
+    print_warning "Health summary: ${failed} module(s) need attention"
+  fi
 }
 
 # ---------------------------------------------------------------------------

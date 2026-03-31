@@ -5,6 +5,8 @@
 #   ./siteinfo.zsh            — launch interactive menu
 #   ./siteinfo.zsh --help     — show help text
 #   ./siteinfo.zsh --version  — show version
+#   ./siteinfo.zsh --profile quick|standard|deep
+#   ./siteinfo.zsh --compact  — concise output mode
 #
 # Requires: curl, dig, host
 
@@ -61,6 +63,9 @@ show_help() {
     ./siteinfo.zsh              Launch interactive menu
     ./siteinfo.zsh --help       Show this help text
     ./siteinfo.zsh --version    Show version
+    ./siteinfo.zsh --profile P  Set profile: quick | standard | deep
+    ./siteinfo.zsh --compact    Compact UI mode
+    ./siteinfo.zsh --expanded   Expanded UI mode (default)
 
   REQUIREMENTS
     curl   HTTP requests
@@ -101,16 +106,50 @@ show_version() {
 # ---------------------------------------------------------------------------
 main() {
   # Handle CLI flags
-  case "${1:-}" in
-    --help|-h)
-      show_help
-      exit 0
-      ;;
-    --version|-v)
-      show_version
-      exit 0
-      ;;
-  esac
+  local arg
+  while (( $# > 0 )); do
+    arg="${1}"
+    case "${arg}" in
+      --help|-h)
+        show_help
+        exit 0
+        ;;
+      --version|-v)
+        show_version
+        exit 0
+        ;;
+      --profile)
+        shift
+        case "${1:-}" in
+          quick|standard|deep)
+            SITEINFO_PROFILE="${1}"
+            ;;
+          *)
+            echo "Invalid profile: ${1:-<empty>}. Use quick|standard|deep." >&2
+            exit 1
+            ;;
+        esac
+        ;;
+      --quick)
+        SITEINFO_PROFILE="quick"
+        ;;
+      --deep)
+        SITEINFO_PROFILE="deep"
+        ;;
+      --compact)
+        SITEINFO_UI_MODE="compact"
+        ;;
+      --expanded)
+        SITEINFO_UI_MODE="expanded"
+        ;;
+      *)
+        echo "Unknown option: ${arg}" >&2
+        echo "Use --help to see available options." >&2
+        exit 1
+        ;;
+    esac
+    shift
+  done
 
   # Load all modules
   _load_modules
@@ -122,6 +161,9 @@ main() {
   if ! check_dependencies; then
     exit 1
   fi
+
+  print_info "Runtime profile: ${SITEINFO_PROFILE}"
+  print_info "UI mode: ${SITEINFO_UI_MODE}"
 
   # Start the interactive menu loop
   menu_loop

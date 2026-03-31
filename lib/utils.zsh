@@ -1,6 +1,11 @@
 #!/usr/bin/env zsh
 # utils.zsh — Shared utilities: URL validation, dependency checks, prompt helpers
 
+# Default runtime profile for external checks: quick | standard | deep
+typeset -g SITEINFO_PROFILE="${SITEINFO_PROFILE:-standard}"
+typeset -g SITEINFO_CACHE_DIR="${SITEINFO_CACHE_DIR:-${SCRIPT_DIR}/.cache/siteinfo}"
+typeset -g SITEINFO_UI_MODE="${SITEINFO_UI_MODE:-expanded}"
+
 # ---------------------------------------------------------------------------
 # check_dependencies — verify required system tools are available
 # ---------------------------------------------------------------------------
@@ -33,6 +38,124 @@ load_env_file() {
     # shellcheck source=/dev/null
     source "${env_path}"
     set +a
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# ensure_cache_dir — create cache directory if needed
+# ---------------------------------------------------------------------------
+ensure_cache_dir() {
+  mkdir -p "${SITEINFO_CACHE_DIR}" 2>/dev/null || true
+}
+
+# ---------------------------------------------------------------------------
+# cache_key_hash — stable hash for cache keys
+# ---------------------------------------------------------------------------
+cache_key_hash() {
+  local key="${1}"
+  if command -v shasum &>/dev/null; then
+    echo -n "${key}" | shasum -a 256 | awk '{print $1}'
+  else
+    echo -n "${key}" | md5 | awk '{print $NF}'
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# cache_get — read cached value if file age <= ttl seconds
+# Usage: cache_get "service" "key" 3600
+# ---------------------------------------------------------------------------
+cache_get() {
+  local service="${1}"
+  local key="${2}"
+  local ttl="${3:-3600}"
+  local hash path now mtime age
+
+  ensure_cache_dir
+  hash=$(cache_key_hash "${service}|${key}")
+  path="${SITEINFO_CACHE_DIR}/${service}_${hash}.cache"
+  [[ ! -f "${path}" ]] && return 1
+
+  now=$(date +%s)
+  mtime=$(stat -f "%m" "${path}" 2>/dev/null || echo 0)
+  age=$(( now - mtime ))
+  (( age > ttl )) && return 1
+
+  < "${path}" tr -d '\r'
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# cache_set — write value to cache
+# Usage: cache_set "service" "key" "value"
+# ---------------------------------------------------------------------------
+cache_set() {
+  local service="${1}"
+  local key="${2}"
+  local value="${3}"
+  local hash path
+
+  ensure_cache_dir
+  hash=$(cache_key_hash "${service}|${key}")
+  path="${SITEINFO_CACHE_DIR}/${service}_${hash}.cache"
+  printf "%s" "${value}" > "${path}"
+}
+
+# ---------------------------------------------------------------------------
+# ui_is_compact — helper to check compact output mode
+# ---------------------------------------------------------------------------
+ui_is_compact() {
+  [[ "${SITEINFO_UI_MODE:-expanded}" == "compact" ]]
+}
+
+# ---------------------------------------------------------------------------
+# run_with_spinner — run command in background with spinner animation
+# Usage: out=$(run_with_spinner "Message" command arg1 arg2 ...)
+# ---------------------------------------------------------------------------
+run_with_spinner() {
+  local message="${1}"
+  shift
+
+  local tmp_file
+  tmp_file=$(mktemp "/tmp/siteinfo-spinner.XXXXXX")
+
+  "$@" > "${tmp_file}" 2>/dev/null &
+  local pid=$!
+
+  local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+  local i=1
+  while kill -0 "${pid}" 2>/dev/null; do
+    printf "\r  ${CLR_CYAN}%s${CLR_RESET} ${CLR_DIM}%s...${CLR_RESET}" "${frames[$i]}" "${message}"
+    i=$(( (i % ${#frames[@]}) + 1 ))
+    sleep 0.08
+  done
+  wait "${pid}" 2>/dev/null
+  printf "\r\033[K"
+
+  < "${tmp_file}"
+  rm -f "${tmp_file}"
+}
+
+# ---------------------------------------------------------------------------
+# print_scan_progress — animated high-level scan progress bar
+# Usage: print_scan_progress 2 6 "HTTP"
+# ---------------------------------------------------------------------------
+print_scan_progress() {
+  local current="${1}"
+  local total="${2}"
+  local label="${3:-Step}"
+  local width=24
+  local filled=$(( current * width / total ))
+  local pct=$(( current * 100 / total ))
+  local bar="" i
+
+  i=0
+  while (( i < filled )); do bar+="█"; (( i++ )); done
+  while (( i < width )); do bar+="░"; (( i++ )); done
+
+  printf "\r  ${CLR_DIM}Progress:${CLR_RESET} ${CLR_BOLD_CYAN}%s${CLR_RESET} ${CLR_BOLD_WHITE}%3d%%${CLR_RESET} ${CLR_DIM}(%d/%d • %s)${CLR_RESET}" \
+    "${bar}" "${pct}" "${current}" "${total}" "${label}"
+  if (( current == total )); then
+    echo ""
   fi
 }
 
